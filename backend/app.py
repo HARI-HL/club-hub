@@ -13,6 +13,9 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
 )
+import smtplib
+from email.message import EmailMessage
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 load_dotenv()
 
@@ -29,6 +32,26 @@ bcrypt = Bcrypt(app)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
 
+serializer = URLSafeTimedSerializer(os.getenv("JWT_SECRET_KEY"))
+
+
+def send_verification_email(user):
+    token = serializer.dumps(user.email, salt="email-verify")
+    base = os.getenv("BACKEND_URL", "http://127.0.0.1:5000")
+    link = f"{base}/api/auth/verify/{token}"
+
+    msg = EmailMessage()
+    msg["Subject"] = "Verify your Club Hub account"
+    msg["From"] = os.getenv("MAIL_USERNAME")
+    msg["To"] = user.email
+    msg.set_content(
+        f"Hi {user.name},\n\n"
+        f"Click this link to verify your email (valid for 24 hours):\n{link}\n"
+    )
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(os.getenv("MAIL_USERNAME"), os.getenv("MAIL_PASSWORD"))
+        server.send_message(msg)
 
 class User(db.Model):
     __tablename__ = "users"
@@ -180,7 +203,16 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    return jsonify({"message": "Account created", "id": user.id}), 201
+    try:
+        send_verification_email(user)
+    except Exception as e:
+        print("Email failed:", e)
+        return jsonify({
+            "message": "Account created, but the verification email could not be sent",
+            "id": user.id,
+        }), 201
+
+    return jsonify({"message": "Account created. Check your email to verify.", "id": user.id}), 201
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
@@ -194,6 +226,8 @@ def login():
         return jsonify({"error": "Invalid email or password"}), 401
     if not user.is_active:
         return jsonify({"error": "This account has been disabled"}), 403
+    if not user.is_verified:
+        return jsonify({"error": "Please verify your email first"}), 403
 
     token = create_access_token(identity=str(user.id))
     return jsonify({"token": token, "role": user.role, "name": user.name})
@@ -209,6 +243,23 @@ def me():
         "email": user.email,
         "role": user.role,
     })
+
+@app.route("/api/auth/verify/<token>")
+def verify_email(token):
+    try:
+        email = serializer.loads(token, salt="email-verify", max_age=86400)
+    except SignatureExpired:
+        return jsonify({"error": "This link has expired"}), 400
+    except BadSignature:
+        return jsonify({"error": "Invalid verification link"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user.is_verified = True
+    db.session.commit()
+    return jsonify({"message": "Email verified. You can now log in."})
 
 if __name__ == "__main__":
     app.run(debug=True)
