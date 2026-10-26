@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from dotenv import load_dotenv
 from flask import request
+from sqlalchemy import func
 from functools import wraps
 from sqlalchemy.exc import IntegrityError
 from flask_bcrypt import Bcrypt
@@ -98,6 +99,14 @@ class ClubAdmin(db.Model):
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
     club_id = db.Column(db.Integer, db.ForeignKey("clubs.id"), primary_key=True)
+
+def parse_dt(value):
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        raise ValueError("Time must include a timezone offset, like +05:30")
+    return dt
 
 class Application(db.Model):
     __tablename__ = "applications"
@@ -433,6 +442,82 @@ def review_application(application_id):
         return jsonify({"error": "Could not save, a conflict occurred"}), 409
 
     return jsonify({"message": f"Application {decision}"})
+
+@app.route("/api/clubs/<int:club_id>/events", methods=["POST"])
+@roles_required("club_admin", "site_admin")
+def create_event(club_id):
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    club = db.session.get(Club, club_id)
+    if not club:
+        return jsonify({"error": "Club not found"}), 404
+    if user.role != "site_admin" and not is_club_admin(user_id, club_id):
+        return jsonify({"error": "You do not manage this club"}), 403
+
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    try:
+        starts_at = parse_dt(data.get("starts_at"))
+        ends_at = parse_dt(data.get("ends_at"))
+        deadline = parse_dt(data.get("registration_deadline"))
+        capacity = int(data.get("capacity"))
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid input: {e}"}), 400
+
+    if not title or not starts_at or not deadline:
+        return jsonify({"error": "Title, start time and registration deadline are required"}), 400
+    if capacity < 1:
+        return jsonify({"error": "Capacity must be at least 1"}), 400
+    if starts_at <= datetime.now(timezone.utc):
+        return jsonify({"error": "Start time must be in the future"}), 400
+    if deadline > starts_at:
+        return jsonify({"error": "Registration deadline must be before the start time"}), 400
+    if ends_at and ends_at <= starts_at:
+        return jsonify({"error": "End time must be after the start time"}), 400
+
+    event = Event(
+        club_id=club.id,
+        title=title,
+        description=(data.get("description") or "").strip(),
+        venue=(data.get("venue") or "").strip(),
+        starts_at=starts_at,
+        ends_at=ends_at,
+        capacity=capacity,
+        registration_deadline=deadline,
+        created_by=user_id,
+    )
+    db.session.add(event)
+    db.session.commit()
+    return jsonify({"message": "Event created", "id": event.id}), 201
+
+
+@app.route("/api/events", methods=["GET"])
+def list_events():
+    query = Event.query.filter_by(is_removed=False)
+    club_id = request.args.get("club_id", type=int)
+    if club_id:
+        query = query.filter_by(club_id=club_id)
+    events = query.order_by(Event.starts_at).all()
+
+    counts = dict(
+        db.session.query(EventRegistration.event_id, func.count())
+        .group_by(EventRegistration.event_id)
+        .all()
+    )
+    return jsonify([
+        {
+            "id": e.id,
+            "club_id": e.club_id,
+            "title": e.title,
+            "description": e.description,
+            "venue": e.venue,
+            "starts_at": e.starts_at.isoformat(),
+            "registration_deadline": e.registration_deadline.isoformat(),
+            "capacity": e.capacity,
+            "registered": counts.get(e.id, 0),
+        }
+        for e in events
+    ])
 
 if __name__ == "__main__":
     app.run(debug=True)
