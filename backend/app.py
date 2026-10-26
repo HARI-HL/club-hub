@@ -519,5 +519,36 @@ def list_events():
         for e in events
     ])
 
+@app.route("/api/events/<int:event_id>/register", methods=["POST"])
+@roles_required("student", "club_admin", "site_admin")
+def register_for_event(event_id):
+    user_id = int(get_jwt_identity())
+
+    event = (
+        db.session.query(Event)
+        .filter_by(id=event_id, is_removed=False)
+        .with_for_update()
+        .first()
+    )
+    if not event:
+        return jsonify({"error": "Event not found"}), 404
+    if datetime.now(timezone.utc) > event.registration_deadline:
+        return jsonify({"error": "Registration has closed for this event"}), 400
+    if EventRegistration.query.filter_by(event_id=event.id, user_id=user_id).first():
+        return jsonify({"error": "You are already registered"}), 409
+
+    taken = EventRegistration.query.filter_by(event_id=event.id).count()
+    if taken >= event.capacity:
+        return jsonify({"error": "This event is full"}), 409
+
+    db.session.add(EventRegistration(event_id=event.id, user_id=user_id))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Could not register, please try again"}), 409
+
+    return jsonify({"message": "You are registered", "seats_left": event.capacity - taken - 1}), 201
+
 if __name__ == "__main__":
     app.run(debug=True)
