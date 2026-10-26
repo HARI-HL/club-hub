@@ -550,5 +550,66 @@ def register_for_event(event_id):
 
     return jsonify({"message": "You are registered", "seats_left": event.capacity - taken - 1}), 201
 
+@app.route("/api/clubs/<int:club_id>/recruitment", methods=["POST"])
+@roles_required("club_admin", "site_admin")
+def set_recruitment(club_id):
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    club = db.session.get(Club, club_id)
+    if not club:
+        return jsonify({"error": "Club not found"}), 404
+    if user.role != "site_admin" and not is_club_admin(user_id, club_id):
+        return jsonify({"error": "You do not manage this club"}), 403
+
+    data = request.get_json() or {}
+    if not isinstance(data.get("open"), bool):
+        return jsonify({"error": "'open' must be true or false"}), 400
+
+    club.recruitment_open = data["open"]
+    db.session.commit()
+    return jsonify({"message": "Recruitment updated", "recruitment_open": club.recruitment_open})
+
+
+@app.route("/api/me/overview", methods=["GET"])
+@jwt_required()
+def my_overview():
+    user_id = int(get_jwt_identity())
+
+    applications = (
+        db.session.query(Application, Club)
+        .join(Club, Application.club_id == Club.id)
+        .filter(Application.user_id == user_id)
+        .order_by(Application.applied_at.desc())
+        .all()
+    )
+    memberships = (
+        db.session.query(Membership, Club)
+        .join(Club, Membership.club_id == Club.id)
+        .filter(Membership.user_id == user_id)
+        .all()
+    )
+    registrations = (
+        db.session.query(EventRegistration, Event)
+        .join(Event, EventRegistration.event_id == Event.id)
+        .filter(EventRegistration.user_id == user_id, Event.is_removed == False)
+        .order_by(Event.starts_at)
+        .all()
+    )
+
+    return jsonify({
+        "applications": [
+            {"club": c.name, "status": a.status, "applied_at": a.applied_at.isoformat()}
+            for a, c in applications
+        ],
+        "memberships": [
+            {"club": c.name, "category": m.category, "joined_at": m.joined_at.isoformat()}
+            for m, c in memberships
+        ],
+        "events": [
+            {"title": e.title, "starts_at": e.starts_at.isoformat(), "venue": e.venue}
+            for r, e in registrations
+        ],
+    })
+
 if __name__ == "__main__":
     app.run(debug=True)
