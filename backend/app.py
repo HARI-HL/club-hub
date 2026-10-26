@@ -7,6 +7,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from flask import request
 from functools import wraps
+from sqlalchemy.exc import IntegrityError
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
@@ -195,6 +196,8 @@ def roles_required(*allowed_roles):
         return wrapper
     return decorator
 
+def is_club_admin(user_id, club_id):
+    return db.session.get(ClubAdmin, (user_id, club_id)) is not None
 
 @app.route("/api/health")
 def health():
@@ -359,6 +362,77 @@ def apply_to_club(club_id):
     db.session.add(application)
     db.session.commit()
     return jsonify({"message": "Application submitted", "id": application.id}), 201
+
+@app.route("/api/clubs/<int:club_id>/applications", methods=["GET"])
+@roles_required("club_admin", "site_admin")
+def list_applications(club_id):
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    if user.role != "site_admin" and not is_club_admin(user_id, club_id):
+        return jsonify({"error": "You do not manage this club"}), 403
+
+    query = (
+        db.session.query(Application, User)
+        .join(User, Application.user_id == User.id)
+        .filter(Application.club_id == club_id)
+    )
+    status = request.args.get("status")
+    if status:
+        query = query.filter(Application.status == status)
+
+    rows = query.order_by(Application.applied_at).all()
+    return jsonify([
+        {
+            "id": a.id,
+            "name": u.name,
+            "email": u.email,
+            "statement": a.statement,
+            "status": a.status,
+            "applied_at": a.applied_at.isoformat() if a.applied_at else None,
+        }
+        for a, u in rows
+    ])
+
+
+@app.route("/api/applications/<int:application_id>/review", methods=["POST"])
+@roles_required("club_admin", "site_admin")
+def review_application(application_id):
+    reviewer_id = int(get_jwt_identity())
+    reviewer = db.session.get(User, reviewer_id)
+    application = db.session.get(Application, application_id)
+    if not application:
+        return jsonify({"error": "Application not found"}), 404
+    if reviewer.role != "site_admin" and not is_club_admin(reviewer_id, application.club_id):
+        return jsonify({"error": "You do not manage this club"}), 403
+    if application.status != "pending":
+        return jsonify({"error": "This application was already reviewed"}), 409
+
+    data = request.get_json() or {}
+    decision = (data.get("decision") or "").lower()
+    if decision not in ("accepted", "rejected"):
+        return jsonify({"error": "Decision must be accepted or rejected"}), 400
+
+    if decision == "accepted":
+        club = db.session.get(Club, application.club_id)
+        if Membership.query.filter_by(user_id=application.user_id, category=club.category).first():
+            return jsonify({"error": "The applicant is already in a club of this category"}), 409
+        db.session.add(Membership(
+            user_id=application.user_id,
+            club_id=club.id,
+            category=club.category,
+        ))
+
+    application.status = decision
+    application.reviewed_by = reviewer_id
+    application.reviewed_at = datetime.now(timezone.utc)
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Could not save, a conflict occurred"}), 409
+
+    return jsonify({"message": f"Application {decision}"})
 
 if __name__ == "__main__":
     app.run(debug=True)
