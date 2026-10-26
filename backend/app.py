@@ -311,5 +311,30 @@ def create_club():
     db.session.commit()
     return jsonify({"message": "Club created", "id": club.id}), 201
 
+@app.route("/api/clubs/<int:club_id>/admins", methods=["POST"])
+@roles_required("site_admin")
+def add_club_admin(club_id):
+    club = db.session.get(Club, club_id)
+    if not club:
+        return jsonify({"error": "Club not found"}), 404
+
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "No user with that email"}), 404
+    if not user.is_verified:
+        return jsonify({"error": "That user has not verified their email"}), 400
+
+    existing = db.session.get(ClubAdmin, (user.id, club.id))
+    if existing:
+        return jsonify({"error": "Already an admin of this club"}), 409
+
+    if user.role == "student":
+        user.role = "club_admin"
+    db.session.add(ClubAdmin(user_id=user.id, club_id=club.id))
+    db.session.commit()
+    return jsonify({"message": f"{user.name} is now an admin of {club.name}"}), 201
+
 if __name__ == "__main__":
     app.run(debug=True)
