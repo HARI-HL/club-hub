@@ -1,4 +1,6 @@
 import os
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timezone
 from flask_migrate import Migrate
 from flask import Flask, jsonify
@@ -34,6 +36,7 @@ bcrypt = Bcrypt(app)
 
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
+limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 
 serializer = URLSafeTimedSerializer(os.getenv("JWT_SECRET_KEY"))
 
@@ -214,6 +217,7 @@ def health():
     return jsonify({"status": "ok", "database": "connected"})
 
 @app.route("/api/auth/register", methods=["POST"])
+@limiter.limit("5 per minute")
 def register():
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
@@ -244,6 +248,7 @@ def register():
     return jsonify({"message": "Account created. Check your email to verify.", "id": user.id}), 201
 
 @app.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     data = request.get_json() or {}
     email = (data.get("email") or "").strip().lower()
@@ -610,6 +615,26 @@ def my_overview():
             for r, e in registrations
         ],
     })
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"error": "Method not allowed"}), 405
+
+
+@app.errorhandler(429)
+def too_many_requests(e):
+    return jsonify({"error": "Too many requests, please slow down"}), 429
+
+
+@app.errorhandler(500)
+def server_error(e):
+    db.session.rollback()
+    return jsonify({"error": "Something went wrong on our side"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
