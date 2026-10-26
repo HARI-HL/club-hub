@@ -336,5 +336,29 @@ def add_club_admin(club_id):
     db.session.commit()
     return jsonify({"message": f"{user.name} is now an admin of {club.name}"}), 201
 
+@app.route("/api/clubs/<int:club_id>/apply", methods=["POST"])
+@roles_required("student", "club_admin")
+def apply_to_club(club_id):
+    user_id = int(get_jwt_identity())
+    club = db.session.get(Club, club_id)
+    if not club:
+        return jsonify({"error": "Club not found"}), 404
+    if not club.recruitment_open:
+        return jsonify({"error": "Recruitment is closed for this club"}), 400
+    if db.session.get(ClubAdmin, (user_id, club.id)):
+        return jsonify({"error": "You manage this club"}), 400
+    if Membership.query.filter_by(user_id=user_id, category=club.category).first():
+        return jsonify({"error": "You are already a member of a club in this category"}), 409
+    if Application.query.filter_by(user_id=user_id, club_id=club.id).first():
+        return jsonify({"error": "You have already applied to this club"}), 409
+
+    data = request.get_json() or {}
+    statement = (data.get("statement") or "").strip()
+
+    application = Application(user_id=user_id, club_id=club.id, statement=statement)
+    db.session.add(application)
+    db.session.commit()
+    return jsonify({"message": "Application submitted", "id": application.id}), 201
+
 if __name__ == "__main__":
     app.run(debug=True)
