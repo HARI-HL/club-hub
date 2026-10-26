@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from dotenv import load_dotenv
 from flask import request
+from functools import wraps
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager,
@@ -67,6 +68,8 @@ class User(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
 class Club(db.Model):
     __tablename__ = "clubs"
 
@@ -178,6 +181,20 @@ class EventRegistration(db.Model):
         db.UniqueConstraint("event_id", "user_id", name="uq_registration_event_user"),
     )
 
+def roles_required(*allowed_roles):
+    def decorator(fn):
+        @wraps(fn)
+        @jwt_required()
+        def wrapper(*args, **kwargs):
+            user = db.session.get(User, int(get_jwt_identity()))
+            if not user or not user.is_active:
+                return jsonify({"error": "Account not available"}), 403
+            if user.role not in allowed_roles:
+                return jsonify({"error": "You do not have permission"}), 403
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
 
 @app.route("/api/health")
 def health():
@@ -260,6 +277,39 @@ def verify_email(token):
     user.is_verified = True
     db.session.commit()
     return jsonify({"message": "Email verified. You can now log in."})
+
+@app.route("/api/clubs", methods=["GET"])
+def list_clubs():
+    clubs = Club.query.order_by(Club.name).all()
+    return jsonify([
+        {
+            "id": c.id,
+            "name": c.name,
+            "category": c.category,
+            "description": c.description,
+            "recruitment_open": c.recruitment_open,
+        }
+        for c in clubs
+    ])
+
+
+@app.route("/api/clubs", methods=["POST"])
+@roles_required("site_admin")
+def create_club():
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    category = data.get("category")
+    description = (data.get("description") or "").strip()
+
+    if not name or category not in ("technical", "non_technical"):
+        return jsonify({"error": "Name and a valid category are required"}), 400
+    if Club.query.filter_by(name=name).first():
+        return jsonify({"error": "A club with this name already exists"}), 409
+
+    club = Club(name=name, category=category, description=description)
+    db.session.add(club)
+    db.session.commit()
+    return jsonify({"message": "Club created", "id": club.id}), 201
 
 if __name__ == "__main__":
     app.run(debug=True)
