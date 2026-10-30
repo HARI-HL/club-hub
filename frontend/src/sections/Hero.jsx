@@ -111,7 +111,7 @@ export default function Hero() {
 
   return (
     <section id="hero" ref={root} className="relative min-h-[100dvh] overflow-hidden border-b border-line">
-      <div className="mx-auto grid min-h-[100dvh] max-w-[1440px] grid-cols-1 px-phi-3 pt-[calc(3.5rem+2.618rem)] lg:grid-cols-golden lg:gap-phi-4 lg:px-phi-5 lg:pt-0">
+      <div className="mx-auto grid min-h-[100dvh] max-w-[1440px] grid-cols-1 px-phi-3 pt-28 lg:grid-cols-golden lg:gap-phi-4 lg:px-phi-5 lg:pb-phi-4 lg:pt-32">
         {/* 61.8%: the argument */}
         <div className="relative z-10 flex flex-col justify-center pb-phi-4 lg:pb-0">
           <p data-fade className="meta">
@@ -158,7 +158,7 @@ export default function Hero() {
         </div>
 
         {/* 38.2%: the instrument */}
-        <div ref={sceneBox} className="relative h-[52vh] min-h-[22rem] lg:h-auto lg:min-h-[100dvh]">
+        <div ref={sceneBox} className="relative h-[52vh] min-h-[22rem] lg:h-auto lg:min-h-[calc(100dvh-8rem)]">
           <div className="absolute inset-0 lg:-left-[18%] lg:-right-[6%]">
             {gl ? (
               <SceneBoundary fallback={fallback}>

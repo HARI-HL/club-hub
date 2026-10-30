@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { UNAUTHORIZED_EVENT } from "../services/api.js";
 
 const AuthContext = createContext(null);
@@ -6,6 +7,7 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null); // { id, name, email, role }
   const [ready, setReady] = useState(!api.auth.isLoggedIn());
   const [expired, setExpired] = useState(false);
@@ -49,7 +51,8 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     api.auth.logout();
     setUser(null);
-  }, []);
+    navigate("/login", { replace: true });
+  }, [navigate]);
 
   const value = useMemo(
     () => ({ user, ready, expired, dismissExpired: () => setExpired(false), login, loginWithGoogle, logout }),

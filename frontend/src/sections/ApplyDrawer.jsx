@@ -178,8 +178,7 @@ export default function ApplyDrawer({ club, onClose }) {
 
           {user && done && (
             <Notice tone="ok" title="Application submitted">
-              {club.name} will review it. Check the status any time under your account overview once that screen is
-              added, or ask the club admin.
+              {club.name} will review it. Track the status on your Account page.
             </Notice>
           )}
 

@@ -1,6 +1,12 @@
 import { Link } from "react-router-dom";
 
-// Shared frame for login, register and verify. 38 / 62 split: context on the left, form on the right.
+const SPECS = [
+  ["01", "VERIFIED CAMPUS IDENTITY"],
+  ["02", "ONE-CLUB-PER-CATEGORY GUARD"],
+  ["03", "ROW-LOCKED EVENT SEATING"],
+];
+
+// Shared frame for login, register and verify. 38 / 62 split: context on the left, a smoked glass vault on the right.
 export default function AuthShell({ eyebrow, title, intro, children, aside }) {
   return (
     <div className="min-h-[100dvh]">
@@ -21,11 +27,38 @@ export default function AuthShell({ eyebrow, title, intro, children, aside }) {
             <p className="meta">{eyebrow}</p>
             <h1 className="mt-phi-2 text-xl font-bold">{title}</h1>
             <p className="mt-phi-2 max-w-[36ch] text-base text-muted">{intro}</p>
+
+            <ol className="mt-phi-5 hidden border-t border-line lg:block">
+              {SPECS.map(([n, text]) => (
+                <li key={n} className="flex gap-phi-2 border-b border-line py-phi-2 font-mono text-xs uppercase">
+                  <span className="text-accent">{n} /</span>
+                  <span className="text-ink">{text}</span>
+                </li>
+              ))}
+            </ol>
           </div>
           {aside}
         </div>
 
-        <div className="border border-line bg-surface p-phi-3 shadow-specular lg:p-phi-5">{children}</div>
+        {/* Smoked glass vault. A faint accent glow sits behind it so the glass has something to catch. */}
+        <div className="relative">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-[12%]"
+            style={{ background: "radial-gradient(closest-side, rgba(226,255,50,0.04), transparent 75%)" }}
+          />
+          <div
+            className="relative overflow-hidden rounded-none border border-white/10 bg-[#0D0E12]/80 p-phi-3 backdrop-blur-2xl lg:p-phi-5"
+            style={{ boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.20), 0 30px 60px rgba(0,0,0,0.85)" }}
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{ background: "linear-gradient(to bottom, rgba(255,255,255,0.04), transparent)" }}
+            />
+            <div className="relative mx-auto w-full max-w-[400px]">{children}</div>
+          </div>
+        </div>
       </main>
     </div>
   );

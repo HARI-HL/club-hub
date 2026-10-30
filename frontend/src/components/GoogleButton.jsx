@@ -45,7 +45,7 @@ export default function GoogleButton({ onSuccess }) {
           size: "large",
           text: "continue_with",
           shape: "rectangular",
-          width: Math.min(box.current.clientWidth || 320, 400),
+          width: Math.min(Math.floor(box.current.clientWidth) || 320, 400),
         });
       })
       .catch((err) => alive && setError(err.message));
@@ -58,7 +58,8 @@ export default function GoogleButton({ onSuccess }) {
 
   return (
     <div>
-      <div ref={box} className="min-h-[44px]" />
+      {/* color-scheme light matches Google's iframe, which removes the opaque white box the browser paints on a mismatch */}
+      <div ref={box} className="min-h-[44px] w-full bg-transparent" style={{ colorScheme: "light" }} />
       {error && (
         <p role="alert" className="meta mt-phi-1 normal-case text-ink">
           {error}

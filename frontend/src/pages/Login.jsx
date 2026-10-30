@@ -46,7 +46,7 @@ export default function Login() {
       eyebrow="Access / Sign in"
       title="Welcome back."
       intro="Sign in to apply to clubs, track your applications and reserve event seats."
-      aside={<p className="meta">Sessions last about 15 minutes, then you sign in again.</p>}
+      aside={<p className="meta">[SESSION: PERSISTENT // DEVICE TOKEN ACTIVE UNTIL EXPLICIT LOGOUT]</p>}
     >
       <GoogleButton onSuccess={() => navigate(from, { replace: true })} />
       <form onSubmit={submit} noValidate className="flex flex-col gap-phi-3">

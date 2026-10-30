@@ -52,7 +52,7 @@ function MagneticButton({ children, onClick, href }) {
 export default function Hud() {
   const lenis = useLenis();
   const { clubs, status } = useClubs();
-  const { user, logout } = useAuth();
+  const { user, ready, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menu, setMenu] = useState(false);
   const roleLinks = linksFor(user);
@@ -80,7 +80,7 @@ export default function Hud() {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,backdrop-filter] duration-500 ease-studio ${
-        scrolled ? "border-line bg-canvas/70 backdrop-blur-xl" : "border-transparent bg-transparent"
+        scrolled ? "border-line bg-[#070709]/85 backdrop-blur-md" : "border-line/60 bg-[#070709]/85 backdrop-blur-md"
       }`}
     >
       <nav
@@ -109,7 +109,11 @@ export default function Hud() {
             />
             {badge}
           </span>
-          {user ? (
+          {!ready ? (
+            <span className="meta animate-pulse" role="status">
+              Checking session
+            </span>
+          ) : user ? (
             <div className="flex items-center gap-phi-2">
               {roleLinks.map((l) => (
                 <Link key={l.to} to={l.to} className="meta hidden whitespace-nowrap transition-colors hover:text-accent md:block">

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import api from "./services/api.js";
 import SmoothScroll, { useLenis } from "./lib/SmoothScroll.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import Home from "./pages/Home.jsx";
@@ -9,6 +10,7 @@ import VerifyEmail from "./pages/VerifyEmail.jsx";
 import Account from "./pages/Account.jsx";
 import AdminClub from "./pages/AdminClub.jsx";
 import AdminSite from "./pages/AdminSite.jsx";
+import GuestRoute from "./components/GuestRoute.jsx";
 import RequireRole from "./components/RequireRole.jsx";
 
 // New page, new scroll position. A link like /#events scrolls to that section once the page has mounted.
@@ -54,6 +56,11 @@ function SessionNotice() {
 }
 
 export default function App() {
+  // Wake the free backend while the visitor is still looking at the page
+  useEffect(() => {
+    api.health().catch(() => {});
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -62,8 +69,8 @@ export default function App() {
           <SessionNotice />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+            <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/account" element={<RequireRole><Account /></RequireRole>} />
             <Route path="/admin/club" element={<RequireRole roles={["club_admin", "site_admin"]}><AdminClub /></RequireRole>} />

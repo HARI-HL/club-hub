@@ -1,7 +1,7 @@
 import os
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import secrets
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
@@ -38,6 +38,7 @@ migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
 
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=30)
 jwt = JWTManager(app)
 limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 
