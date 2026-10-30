@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthShell from "./AuthShell.jsx";
 import Field from "../components/Field.jsx";
 import Notice from "../components/Notice.jsx";
+import GoogleButton from "../components/GoogleButton.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { describeError, useCooldown } from "../utils/errors.js";
 
@@ -47,6 +48,7 @@ export default function Login() {
       intro="Sign in to apply to clubs, track your applications and reserve event seats."
       aside={<p className="meta">Sessions last about 15 minutes, then you sign in again.</p>}
     >
+      <GoogleButton onSuccess={() => navigate(from, { replace: true })} />
       <form onSubmit={submit} noValidate className="flex flex-col gap-phi-3">
         {expired && !error && <Notice title="Session expired">Your session timed out. Sign in again to continue.</Notice>}
 

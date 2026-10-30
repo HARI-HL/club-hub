@@ -153,6 +153,14 @@ export const api = {
       return data;
     },
 
+    // POST /api/auth/google  { credential }  -> 200 { token, role, name }
+    // credential is the ID token from Google's sign-in button. Creates the account on first use.
+    google: async (credential) => {
+      const data = await request("/api/auth/google", { method: "POST", body: { credential } });
+      tokenStore.set(data.token);
+      return data;
+    },
+
     logout: () => tokenStore.clear(),
 
     isLoggedIn: () => Boolean(tokenStore.get()),

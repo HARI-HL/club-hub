@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthShell from "./AuthShell.jsx";
 import Field from "../components/Field.jsx";
 import Notice from "../components/Notice.jsx";
+import GoogleButton from "../components/GoogleButton.jsx";
 import api from "../services/api.js";
 import { describeError, useCooldown } from "../utils/errors.js";
 
@@ -65,6 +66,7 @@ export default function Register() {
         </p>
       }
     >
+      <GoogleButton onSuccess={() => navigate(from, { replace: true })} />
       <form onSubmit={submit} noValidate className="flex flex-col gap-phi-3">
         <Field label="Full name" autoComplete="name" value={form.name} onChange={set("name")} error={fieldErrors.name} />
         <Field

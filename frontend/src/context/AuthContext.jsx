@@ -38,14 +38,22 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential) => {
+    const data = await api.auth.google(credential); // stores the token
+    setUser({ name: data.name, role: data.role });
+    setExpired(false);
+    api.auth.me().then(setUser).catch(() => {});
+    return data;
+  }, []);
+
   const logout = useCallback(() => {
     api.auth.logout();
     setUser(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, expired, dismissExpired: () => setExpired(false), login, logout }),
-    [user, ready, expired, login, logout]
+    () => ({ user, ready, expired, dismissExpired: () => setExpired(false), login, loginWithGoogle, logout }),
+    [user, ready, expired, login, loginWithGoogle, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

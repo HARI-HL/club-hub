@@ -2,6 +2,9 @@ import os
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from datetime import datetime, timezone
+import secrets
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 from flask_migrate import Migrate
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -266,6 +269,59 @@ def login():
     token = create_access_token(identity=str(user.id))
     return jsonify({"token": token, "role": user.role, "name": user.name})
 
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+ALLOWED_GOOGLE_DOMAIN = (os.getenv("ALLOWED_GOOGLE_DOMAIN") or "").strip().lower()
+
+
+@app.route("/api/auth/google", methods=["POST"])
+@limiter.limit("10 per minute")
+def google_login():
+    data = request.get_json() or {}
+    credential = data.get("credential") or ""
+
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({"error": "Google sign-in is not configured"}), 500
+
+    try:
+        info = google_id_token.verify_oauth2_token(
+            credential, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        return jsonify({"error": "Invalid Google sign-in"}), 401
+
+    if not info.get("email_verified"):
+        return jsonify({"error": "Your Google email is not verified"}), 401
+
+    email = (info.get("email") or "").strip().lower()
+    if ALLOWED_GOOGLE_DOMAIN and not email.endswith("@" + ALLOWED_GOOGLE_DOMAIN):
+        return jsonify({"error": "Please use your college Google account"}), 403
+
+    user = User.query.filter_by(email=email).first()
+    try:
+        if user is None:
+            # Google users have no password. A random unusable hash satisfies the NOT NULL column.
+            user = User(
+                name=(info.get("name") or email.split("@")[0])[:100],
+                email=email,
+                password_hash=bcrypt.generate_password_hash(
+                    secrets.token_urlsafe(32)
+                ).decode("utf-8"),
+                is_verified=True,
+            )
+            db.session.add(user)
+            db.session.commit()
+        elif not user.is_verified:
+            user.is_verified = True  # Google has proven they own this email
+            db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        user = User.query.filter_by(email=email).first()
+
+    if not user.is_active:
+        return jsonify({"error": "This account has been disabled"}), 403
+
+    token = create_access_token(identity=str(user.id))
+    return jsonify({"token": token, "role": user.role, "name": user.name})
 
 @app.route("/api/auth/me")
 @jwt_required()
