@@ -21,6 +21,11 @@ function load() {
   return inflight;
 }
 
+/** Forget the cached list so the next page that mounts fetches fresh clubs (after create or toggle). */
+export function invalidateClubs() {
+  cache = null;
+}
+
 /** Returns { clubs, status } where status is "loading" | "ready" | "error". */
 export default function useClubs() {
   const [state, setState] = useState(

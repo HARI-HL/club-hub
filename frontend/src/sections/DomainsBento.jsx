@@ -108,10 +108,17 @@ function ClubCard({ club, index, onApply }) {
     >
       {/* media layer */}
       <div className="absolute inset-0 -z-[1] overflow-hidden">
-        {videoSrc ? (
+        {poster || videoSrc ? (
           <>
-            {poster && <img src={poster} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" loading="lazy" />}
-            {armed && (
+            {poster && (
+              <img
+                src={poster}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-40 transition-opacity duration-500 group-hover:opacity-60"
+                loading="lazy"
+              />
+            )}
+            {videoSrc && armed && (
               <video
                 ref={videoRef}
                 src={videoSrc}
@@ -132,8 +139,11 @@ function ClubCard({ club, index, onApply }) {
 
       <div className="flex h-full min-h-[inherit] flex-col justify-between p-phi-3 lg:p-phi-4">
         <div className="flex items-start justify-between gap-phi-2">
-          <span className="meta">
-            {String(index + 1).padStart(2, "0")} / {technical ? "Technical" : "Non technical"}
+          <span className="meta flex items-center gap-phi-1">
+            {String(index + 1).padStart(2, "0")}
+            <span className="border border-line px-[0.5rem] py-[0.2rem] text-ink">
+              [{technical ? "TECHNICAL" : "NON-TECHNICAL"}]
+            </span>
           </span>
           <span
             className={`meta flex items-center gap-[0.4rem] border px-[0.5rem] py-[0.2rem] ${
@@ -141,7 +151,7 @@ function ClubCard({ club, index, onApply }) {
             }`}
           >
             <span className={`inline-block h-[5px] w-[5px] ${club.recruitment_open ? "bg-accent" : "bg-muted"}`} />
-            {club.recruitment_open ? "Recruiting" : "Closed"}
+            [RECRUITMENT: {club.recruitment_open ? "OPEN" : "CLOSED"}]
           </span>
         </div>
 
@@ -150,16 +160,18 @@ function ClubCard({ club, index, onApply }) {
           {club.description && (
             <p className="mt-phi-1 line-clamp-3 max-w-[44ch] text-base text-muted">{club.description}</p>
           )}
-          <button
-            type="button"
-            onClick={() => onApply(club)}
-            className="meta mt-phi-2 inline-flex items-center gap-phi-1 text-ink transition-colors hover:text-accent"
-          >
-            {club.recruitment_open ? "How to apply" : "How recruitment works"}
-            <span aria-hidden="true" className="transition-transform duration-300 ease-studio group-hover:translate-x-1">
-              &rarr;
-            </span>
-          </button>
+          {club.recruitment_open ? (
+            <button
+              type="button"
+              onClick={() => onApply(club)}
+              className="mt-phi-2 inline-flex items-center gap-phi-1 border border-accent bg-accent px-phi-3 py-[0.5rem] font-mono text-xs uppercase text-accent-ink transition-colors duration-300 ease-studio hover:bg-transparent hover:text-accent"
+            >
+              Apply
+              <span aria-hidden="true">&rarr;</span>
+            </button>
+          ) : (
+            <p className="meta mt-phi-2">Applications are closed. Check back when recruitment reopens.</p>
+          )}
         </div>
       </div>
     </article>

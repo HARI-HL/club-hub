@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import { Link } from "react-router-dom";
 import { useLenis } from "../lib/SmoothScroll.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { linksFor } from "../utils/roles.js";
 import useClubs from "../hooks/useClubs.js";
 
 const LINKS = [
   ["01", "Clubs", "#domains"],
-  ["02", "Process", "#timeline"],
+  ["02", "Events", "#events"],
+  ["03", "Process", "#timeline"],
 ];
 
 function MagneticButton({ children, onClick, href }) {
@@ -48,7 +52,10 @@ function MagneticButton({ children, onClick, href }) {
 export default function Hud() {
   const lenis = useLenis();
   const { clubs, status } = useClubs();
+  const { user, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const roleLinks = linksFor(user);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -84,7 +91,7 @@ export default function Hud() {
           CLUB<span className="text-accent">/</span>HUB
         </a>
 
-        <ul className="hidden items-center gap-phi-4 md:flex">
+        <ul className="hidden items-center gap-phi-4 lg:flex">
           {LINKS.map(([n, label, hash]) => (
             <li key={hash}>
               <a href={hash} onClick={goTo(hash)} className="group meta transition-colors hover:text-ink">
@@ -102,11 +109,78 @@ export default function Hud() {
             />
             {badge}
           </span>
+          {user ? (
+            <div className="flex items-center gap-phi-2">
+              {roleLinks.map((l) => (
+                <Link key={l.to} to={l.to} className="meta hidden whitespace-nowrap transition-colors hover:text-accent md:block">
+                  {l.label}
+                </Link>
+              ))}
+              <span className="meta hidden max-w-[12ch] truncate text-ink md:block" title={user.name}>
+                {user.name}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="meta border border-line px-phi-2 py-[0.45rem] transition-colors hover:border-line-hover hover:text-ink"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <Link to="/login" className="meta border border-line px-phi-2 py-[0.45rem] transition-colors hover:border-line-hover hover:text-ink">
+              Log in
+            </Link>
+          )}
           <MagneticButton href="#domains" onClick={goTo("#domains")}>
             Apply now
           </MagneticButton>
+          <button
+            type="button"
+            aria-expanded={menu}
+            aria-controls="hud-menu"
+            onClick={() => setMenu((m) => !m)}
+            className="meta border border-line px-phi-2 py-[0.45rem] md:hidden"
+          >
+            {menu ? "Close" : "Menu"}
+          </button>
         </div>
       </nav>
+
+      {menu && (
+        <div id="hud-menu" className="border-t border-line bg-canvas/95 px-phi-3 py-phi-2 backdrop-blur-xl md:hidden">
+          <ul className="flex flex-col gap-phi-2">
+            {LINKS.map(([n, label, hash]) => (
+              <li key={hash}>
+                <a
+                  href={hash}
+                  onClick={(e) => {
+                    setMenu(false);
+                    goTo(hash)(e);
+                  }}
+                  className="meta"
+                >
+                  <span className="text-accent">{n}</span> {label}
+                </a>
+              </li>
+            ))}
+            {roleLinks.map((l) => (
+              <li key={l.to}>
+                <Link to={l.to} className="meta text-ink">
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+            {!user && (
+              <li>
+                <Link to="/register" className="meta text-ink">
+                  Create account
+                </Link>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
     </header>
   );
 }

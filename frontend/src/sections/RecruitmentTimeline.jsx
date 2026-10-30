@@ -90,7 +90,7 @@ export default function RecruitmentTimeline() {
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-phi-4 px-phi-3 py-phi-6 lg:grid-cols-golden-reverse lg:gap-phi-5 lg:px-phi-5">
         {/* 38.2%: sticky heading */}
         <div className="lg:sticky lg:top-28 lg:self-start">
-          <p className="meta">02 / Process</p>
+          <p className="meta">03 / Process</p>
           <h2 className="mt-phi-2 text-xl font-bold">From sign up to seat booked.</h2>
           <p className="mt-phi-2 max-w-[36ch] text-base text-muted">
             Five steps, each one a real request to the server. Nothing here is decoration.
