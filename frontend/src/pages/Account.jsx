@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import DashShell from "./DashShell.jsx";
+import Skeleton, { SkeletonRows } from "../components/Skeleton.jsx";
 import Notice from "../components/Notice.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import SpotlightCard from "../components/SpotlightCard.jsx";
@@ -56,9 +57,27 @@ export default function Account() {
       )}
 
       {!error && !data && (
-        <div aria-busy="true" className="grid grid-cols-1 gap-phi-3 lg:grid-cols-golden">
-          <div className="h-64 animate-pulse border border-line bg-surface" />
-          <div className="h-64 animate-pulse border border-line bg-surface" />
+        <div aria-busy="true" role="status" className="grid grid-cols-1 gap-phi-3 lg:grid-cols-golden lg:gap-phi-4">
+          <span className="sr-only">Loading your account</span>
+          <div className="flex flex-col gap-phi-3 lg:col-start-1 lg:row-start-1 lg:gap-phi-4">
+            {[3, 3].map((n, i) => (
+              <Skeleton key={i} className="p-phi-3 lg:p-phi-4">
+                <Skeleton className="h-[0.8rem] w-28" />
+                <Skeleton className="mt-[0.4rem] h-[1.7rem] w-48" />
+                <div className="mt-phi-3">
+                  <SkeletonRows count={n} label="" />
+                </div>
+              </Skeleton>
+            ))}
+          </div>
+          <Skeleton className="order-first p-phi-3 lg:order-none lg:col-start-2 lg:row-start-1 lg:self-start lg:p-phi-4">
+            <Skeleton className="h-[0.8rem] w-28" />
+            <Skeleton className="mt-[0.4rem] h-[1.7rem] w-40" />
+            <div className="mt-phi-3 flex flex-col gap-phi-2">
+              <Skeleton className="h-[5.5rem] w-full" />
+              <Skeleton className="h-[5.5rem] w-full" />
+            </div>
+          </Skeleton>
         </div>
       )}
 

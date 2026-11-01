@@ -4,7 +4,8 @@
 // Clubs without an entry fall back to a generated motif, so nothing breaks while assets are missing.
 //
 // Example:
-//   "Movie Club": { video: "club-hub/movie-club-loop", poster: "club-hub/movie-club-poster" },
+//   "Movie Club": { video: "club-hub/movie-club-loop", poster: "club-hub/movie-club-poster",
+//                   flagship: "Annual 48 hour short film festival" },   // flagship is optional, shown in Hall of Builders
 export const CLUB_ASSETS = {};
 
 export function assetsFor(clubName) {

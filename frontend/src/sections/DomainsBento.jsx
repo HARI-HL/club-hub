@@ -1,9 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import useClubs from "../hooks/useClubs.js";
 import { useSpotlight } from "../components/SpotlightCard.jsx";
 import { assetsFor } from "../config/clubAssets.js";
+import Skeleton from "../components/Skeleton.jsx";
 import { getCloudinaryUrl, getCloudinaryVideoUrl } from "../utils/cloudinary.js";
 
 // Asymmetric 12 column pattern, repeated. 7x2 anchor, two 5s, then a full width strip.
@@ -29,7 +30,7 @@ function seeded(seed) {
   };
 }
 
-function Motif({ id, tall }) {
+export function Motif({ id, tall }) {
   const arcs = useMemo(() => {
     const rnd = seeded(id + 3);
     return Array.from({ length: 9 }, (_, i) => ({
@@ -178,13 +179,38 @@ function ClubCard({ club, index, onApply }) {
   );
 }
 
+const COUNT_KEY = "clubhub_club_count";
+
+// Remember how many clubs the last visit had, so the placeholder grid is the same height as the real one.
+function rememberedCount() {
+  try {
+    const n = parseInt(localStorage.getItem(COUNT_KEY) || "3", 10);
+    return Math.min(6, Math.max(3, Number.isFinite(n) ? n : 3));
+  } catch {
+    return 3;
+  }
+}
+
 function SkeletonGrid() {
+  const count = rememberedCount();
   return (
-    <div className="grid grid-cols-1 gap-phi-2 lg:grid-cols-12 lg:auto-rows-[15rem]" aria-busy="true">
-      {PATTERN.map((cls, i) => (
-        <div key={i} className={`border border-line bg-surface ${cls}`} style={{ minHeight: "15rem" }}>
-          <div className="m-phi-3 h-[0.618rem] w-24 animate-pulse bg-line" />
-        </div>
+    <div className="grid grid-cols-1 gap-phi-2 lg:grid-cols-12 lg:auto-rows-[15rem]" aria-busy="true" role="status">
+      <span className="sr-only">Loading clubs</span>
+      {Array.from({ length: count }, (_, i) => (
+        <Skeleton key={i} className={`min-h-[15rem] ${PATTERN[i % PATTERN.length]}`}>
+          <div className="flex h-full min-h-[inherit] flex-col justify-between p-phi-3 lg:p-phi-4">
+            <div className="flex items-start justify-between gap-phi-2">
+              <Skeleton className="h-[1.4rem] w-28" />
+              <Skeleton className="h-[1.4rem] w-36" />
+            </div>
+            <div>
+              <Skeleton className="h-[1.9rem] w-2/5" />
+              <Skeleton className="mt-phi-1 h-[0.9rem] w-full max-w-[44ch]" />
+              <Skeleton className="mt-[0.5rem] h-[0.9rem] w-3/5 max-w-[30ch]" />
+              <Skeleton className="mt-phi-2 h-[2.2rem] w-28" />
+            </div>
+          </div>
+        </Skeleton>
       ))}
     </div>
   );
@@ -197,6 +223,18 @@ export default function DomainsBento({ onApply }) {
   const [filter, setFilter] = useState("all");
 
   const shown = clubs.filter((c) => filter === "all" || c.category === filter);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    try {
+      localStorage.setItem(COUNT_KEY, String(clubs.length));
+    } catch {
+      /* private mode, ignore */
+    }
+    // Page height just changed. Re-measure scroll positions.
+    const id = requestAnimationFrame(() => ScrollTrigger.refresh());
+    return () => cancelAnimationFrame(id);
+  }, [status, clubs.length]);
 
   // Reveal cards as they enter the viewport. Re-run when the visible set changes.
   useLayoutEffect(() => {

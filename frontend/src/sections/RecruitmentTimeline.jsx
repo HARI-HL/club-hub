@@ -13,7 +13,7 @@ const STEPS = [
   {
     code: "02",
     title: "Verify and sign in",
-    body: "Open the link in the email, then log in. Sessions last about 15 minutes, then you sign in again.",
+    body: "Open the link in the email, then log in. Your session stays signed in for about 30 days on this device.",
     tag: "GET /api/auth/verify",
   },
   {
@@ -36,31 +36,33 @@ const STEPS = [
   },
 ];
 
-const ROW = 168; // px between steps on the SVG path
-const TOP = 24;
-
 export default function RecruitmentTimeline() {
   const root = useRef(null);
-  const path = useRef(null);
-  const height = TOP * 2 + ROW * (STEPS.length - 1);
+  const fill = useRef(null);
 
   useLayoutEffect(() => {
-    const el = path.current;
-    const len = el.getTotalLength();
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const ctx = gsap.context(() => {
       if (reduced) {
-        gsap.set(el, { strokeDasharray: len, strokeDashoffset: 0 });
+        gsap.set(fill.current, { scaleY: 1 });
+        gsap.set("[data-copy]", { opacity: 1, x: 0 });
+        gsap.set("[data-dot]", { backgroundColor: "rgb(226 255 50)", borderColor: "rgb(226 255 50)" });
         return;
       }
-      gsap.set(el, { strokeDasharray: len, strokeDashoffset: len });
+      gsap.set(fill.current, { scaleY: 0, transformOrigin: "top center" });
 
-      // The line draws as the list scrolls through the viewport
-      gsap.to(el, {
-        strokeDashoffset: 0,
+      // The lime fill grows with scroll. The rail is a normal in-flow box, so its height is always right.
+      gsap.to(fill.current, {
+        scaleY: 1,
         ease: "none",
-        scrollTrigger: { trigger: "[data-track]", start: "top 65%", end: "bottom 65%", scrub: 0.6 },
+        scrollTrigger: {
+          trigger: "[data-track]",
+          start: "top 65%",
+          end: "bottom 65%",
+          scrub: 0.6,
+          invalidateOnRefresh: true,
+        },
       });
 
       // Each step lights up when the line reaches it
@@ -72,12 +74,12 @@ export default function RecruitmentTimeline() {
           trigger: step,
           start: "top 65%",
           onEnter: () => {
-            gsap.to(copy, { opacity: 1, x: 0, duration: 0.7, ease: "power3.out" });
-            gsap.to(dot, { backgroundColor: "rgb(226 255 50)", borderColor: "rgb(226 255 50)", scale: 1.25, duration: 0.4 });
+            gsap.to(copy, { opacity: 1, x: 0, duration: 0.7, ease: "power3.out", overwrite: true });
+            gsap.to(dot, { backgroundColor: "rgb(226 255 50)", borderColor: "rgb(226 255 50)", scale: 1.25, duration: 0.4, overwrite: true });
           },
           onLeaveBack: () => {
-            gsap.to(copy, { opacity: 0.25, x: 12, duration: 0.5 });
-            gsap.to(dot, { backgroundColor: "#070709", borderColor: "rgba(255,255,255,0.22)", scale: 1, duration: 0.4 });
+            gsap.to(copy, { opacity: 0.25, x: 12, duration: 0.5, overwrite: true });
+            gsap.to(dot, { backgroundColor: "#070709", borderColor: "rgba(255,255,255,0.22)", scale: 1, duration: 0.4, overwrite: true });
           },
         });
       });
@@ -88,8 +90,8 @@ export default function RecruitmentTimeline() {
   return (
     <section id="timeline" ref={root} className="border-t border-line">
       <div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-phi-4 px-phi-3 py-phi-6 lg:grid-cols-golden-reverse lg:gap-phi-5 lg:px-phi-5">
-        {/* 38.2%: sticky heading */}
-        <div className="lg:sticky lg:top-28 lg:self-start">
+        {/* 38.2%: sticky heading (CSS only, no pin) */}
+        <div className="lg:sticky lg:top-32 lg:self-start">
           <p className="meta">03 / Process</p>
           <h2 className="mt-phi-2 text-xl font-bold">From sign up to seat booked.</h2>
           <p className="mt-phi-2 max-w-[36ch] text-base text-muted">
@@ -97,40 +99,21 @@ export default function RecruitmentTimeline() {
           </p>
         </div>
 
-        {/* 61.8%: the track */}
-        <div data-track className="relative" style={{ minHeight: height + 120 }}>
-          <svg
-            className="absolute left-[11px] top-0 h-full w-[2px] overflow-visible"
-            viewBox={`0 0 2 ${height}`}
-            preserveAspectRatio="none"
-            aria-hidden="true"
-            style={{ height }}
-          >
-            <line x1="1" y1="0" x2="1" y2={height} stroke="rgba(255,255,255,0.09)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-            <path
-              ref={path}
-              d={`M 1 ${TOP} L 1 ${height - TOP}`}
-              stroke="rgb(226 255 50)"
-              strokeWidth="1.5"
-              fill="none"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
+        {/* 61.8%: the track. Steps flow normally, the rail simply fills the whole height. */}
+        <div data-track className="relative">
+          <div className="pointer-events-none absolute bottom-0 left-[11px] top-0 w-[1px] bg-white/10" aria-hidden="true">
+            <div ref={fill} className="absolute inset-0 origin-top scale-y-0 bg-accent" />
+          </div>
 
-          <ol>
-            {STEPS.map((s, i) => (
-              <li
-                key={s.code}
-                data-step
-                className="absolute left-0 right-0 flex gap-phi-3"
-                style={{ top: TOP + i * ROW - 12 }}
-              >
+          <ol className="relative">
+            {STEPS.map((s) => (
+              <li key={s.code} data-step className="flex gap-phi-3 pb-phi-5 last:pb-0">
                 <span
                   data-dot
-                  className="mt-[2px] block h-[24px] w-[24px] shrink-0 border border-line-hover bg-canvas"
+                  className="relative z-[1] mt-[2px] block h-[24px] w-[24px] shrink-0 border border-line-hover bg-canvas"
                   aria-hidden="true"
                 />
-                <div data-copy className="max-w-[52ch] pb-phi-3">
+                <div data-copy className="max-w-[52ch]">
                   <p className="meta">
                     {s.code} <span className="text-ink">/</span> {s.tag}
                   </p>

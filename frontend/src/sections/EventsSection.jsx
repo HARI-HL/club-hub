@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Link, useLocation } from "react-router-dom";
+import Skeleton from "../components/Skeleton.jsx";
 import api from "../services/api.js";
 import useClubs from "../hooks/useClubs.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -130,6 +131,12 @@ export default function EventsSection() {
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    if (events === null) return undefined;
+    const id = requestAnimationFrame(() => ScrollTrigger.refresh());
+    return () => cancelAnimationFrame(id);
+  }, [events]);
+
   const names = useMemo(() => Object.fromEntries(clubs.map((c) => [c.id, c.name])), [clubs]);
 
   const onRegistered = useCallback((id, registered) => {
@@ -167,11 +174,29 @@ export default function EventsSection() {
 
         <div className="mt-phi-4 border-t border-line-hover">
           {events === null && !loadError && (
-            <div aria-busy="true">
+            <div aria-busy="true" role="status">
+              <span className="sr-only">Loading events</span>
               {[0, 1, 2].map((i) => (
-                <div key={i} className="border-b border-line py-phi-3">
-                  <div className="h-[0.618rem] w-32 animate-pulse bg-line" />
-                  <div className="mt-phi-2 h-[1.4rem] w-64 animate-pulse bg-line" />
+                <div
+                  key={i}
+                  className="grid grid-cols-1 gap-phi-3 border-b border-line py-phi-3 lg:grid-cols-[9rem_1fr_13rem_12rem] lg:items-start lg:gap-phi-4"
+                >
+                  <div>
+                    <Skeleton className="h-[2.1rem] w-14" />
+                    <Skeleton className="mt-[0.4rem] h-[0.8rem] w-24" />
+                  </div>
+                  <div>
+                    <Skeleton className="h-[0.8rem] w-28" />
+                    <Skeleton className="mt-[0.4rem] h-[2.2rem] w-3/5 max-w-[22rem]" />
+                    <Skeleton className="mt-[0.5rem] h-[1.4rem] w-full max-w-[56ch]" />
+                    <Skeleton className="mt-phi-1 h-[1.1rem] w-2/5 max-w-[18rem]" />
+                  </div>
+                  <div>
+                    <Skeleton className="h-[1.2rem] w-20" />
+                    <Skeleton className="mt-[0.4rem] h-px w-full" />
+                    <Skeleton className="mt-[0.4rem] h-[0.8rem] w-24" />
+                  </div>
+                  <Skeleton className="h-[2.1rem] w-32" />
                 </div>
               ))}
             </div>

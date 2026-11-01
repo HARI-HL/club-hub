@@ -113,3 +113,88 @@
     opacity: 0.25;
   }
 }
+
+/* ---------------------------------------------------------------
+   Hall of Builders strips. Everything below only reacts to a real
+   mouse hover. Touch devices and idle state stay perfectly still.
+---------------------------------------------------------------- */
+.strip-glow,
+.strip-border {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.strip-glow {
+  background: radial-gradient(
+    420px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgb(var(--accent-rgb) / 0.09),
+    transparent 60%
+  );
+}
+.strip-border {
+  border: 1px solid transparent;
+  background: radial-gradient(
+      260px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgb(var(--accent-rgb) / 0.95),
+      rgba(255, 255, 255, 0.35) 40%,
+      transparent 70%
+    )
+    border-box;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.strip-preview {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 300ms cubic-bezier(0.22, 1, 0.36, 1), transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.strip-preview > div {
+  transform: translate3d(calc(var(--px, 0) * 1px), calc(var(--py, 0) * 1px), 0);
+  transition: transform 180ms linear;
+}
+@media (hover: hover) {
+  .strip:hover .strip-glow,
+  .strip:hover .strip-border,
+  .strip:focus-within .strip-glow,
+  .strip:focus-within .strip-border {
+    opacity: 1;
+  }
+  .strip:hover .strip-preview,
+  .strip:focus-within .strip-preview {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Skeleton shimmer: a faint acid-lime tinted sweep over dark metal */
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 35%,
+    rgba(var(--accent-rgb) / 0.07) 50%,
+    rgba(255, 255, 255, 0.03) 65%,
+    transparent 100%
+  );
+  animation: skeleton-sweep 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes skeleton-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+    transform: none;
+    opacity: 0.5;
+  }
+}

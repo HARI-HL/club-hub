@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import DashShell from "./DashShell.jsx";
 import Field from "../components/Field.jsx";
+import Skeleton, { SkeletonRows } from "../components/Skeleton.jsx";
 import Notice from "../components/Notice.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import SpotlightCard from "../components/SpotlightCard.jsx";
@@ -292,7 +293,7 @@ function Roster({ event }) {
   }
 
   if (error) return <Notice tone="error" title="Could not load the roster">{error}</Notice>;
-  if (!data) return <p className="meta" role="status">Loading roster</p>;
+  if (!data) return <SkeletonRows count={4} label="Loading roster" />;
 
   return (
     <div className="mt-phi-2">
@@ -366,7 +367,7 @@ function EventsPanel({ club, refreshKey }) {
 
       <div className="mt-phi-3">
         {error && <Notice tone="error" title="Could not load events">{error}</Notice>}
-        {!error && events === null && <p className="meta" role="status">Loading events</p>}
+        {!error && events === null && <SkeletonRows count={3} label="Loading events" />}
         {events && events.length === 0 && (
           <p className="text-base text-muted">No events yet. Create one with the form on this page.</p>
         )}
@@ -498,10 +499,12 @@ export default function AdminClub() {
       title="Run your club."
       intro="Open or close recruitment, review applicants and publish events. Only clubs you manage appear here."
     >
-      {clubStatus === "loading" && <p className="meta" role="status">Loading clubs</p>}
+      {clubStatus === "loading" && (
+        <Skeleton className="h-64" role="status" aria-busy="true" />
+      )}
       {clubStatus === "error" && <Notice tone="error" title="Could not load clubs">{describeError(clubError)}</Notice>}
 
-      {clubStatus === "ready" && managed === null && <p className="meta" role="status">Checking which clubs you manage</p>}
+      {clubStatus === "ready" && managed === null && <Skeleton className="h-64" />}
 
       {managed && managedClubs.length === 0 && (
         <Notice title="No clubs yet">
@@ -557,7 +560,7 @@ export default function AdminClub() {
 
               <div className="mt-phi-3">
                 {appsError && <Notice tone="error" title="Could not load applications">{appsError}</Notice>}
-                {!appsError && list === undefined && <p className="meta" role="status">Loading applications</p>}
+                {!appsError && list === undefined && <SkeletonRows count={4} label="Loading applications" />}
                 {list && visible.length === 0 && (
                   <p className="text-base text-muted">
                     {filter === "pending" ? "Nothing waiting for review." : `No ${filter === "all" ? "" : filter + " "}applications.`}
