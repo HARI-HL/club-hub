@@ -7,6 +7,9 @@ import SpotlightCard from "../components/SpotlightCard.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import useClubs, { invalidateClubs } from "../hooks/useClubs.js";
 import api from "../services/api.js";
+import PortfolioLink from "../components/PortfolioLink.jsx";
+import { parseApplicationStatement } from "../utils/statement.js";
+import { downloadOdLetter } from "../utils/odLetter.js";
 import { describeError, formatDateTime } from "../utils/errors.js";
 
 // datetime-local gives "2026-11-20T18:00" with no offset, which the backend rejects.
@@ -97,11 +100,25 @@ function ReviewRow({ app, onReviewed }) {
         <StatusBadge status={app.status} />
       </div>
 
-      {app.statement ? (
-        <p className="mt-phi-2 max-w-[60ch] border-l border-line-hover pl-phi-2 text-base text-muted">{app.statement}</p>
-      ) : (
-        <p className="meta mt-phi-2">No statement written</p>
-      )}
+      {(() => {
+        const { portfolioUrl, text } = parseApplicationStatement(app.statement);
+        return (
+          <>
+            {text ? (
+              <p className="mt-phi-2 max-w-[60ch] whitespace-pre-line border-l border-line-hover pl-phi-2 text-base text-muted">
+                {text}
+              </p>
+            ) : (
+              !portfolioUrl && <p className="meta mt-phi-2">No statement written</p>
+            )}
+            {portfolioUrl && (
+              <div className="mt-phi-2">
+                <PortfolioLink url={portfolioUrl} />
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {app.status === "pending" && (
         <div className="mt-phi-2 flex gap-phi-2">
@@ -134,7 +151,7 @@ function ReviewRow({ app, onReviewed }) {
   );
 }
 
-function CreateEventForm({ club }) {
+function CreateEventForm({ club, onCreated }) {
   const empty = { title: "", description: "", venue: "", starts_at: "", registration_deadline: "", capacity: "" };
   const [form, setForm] = useState(empty);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -185,6 +202,7 @@ function CreateEventForm({ club }) {
         capacity: Number(form.capacity),
       });
       setOk(`"${form.title.trim()}" is live for ${club.name}.`);
+      onCreated?.();
       setForm(empty);
     } catch (err) {
       setError(describeError(err));
@@ -244,6 +262,159 @@ function CreateEventForm({ club }) {
   );
 }
 
+function Roster({ event }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.events
+      .getEventAttendees(event.id)
+      .then((d) => alive && setData(d))
+      .catch((err) => alive && setError(describeError(err)));
+    return () => {
+      alive = false;
+    };
+  }, [event.id]);
+
+  async function makePdf() {
+    setPdfError(null);
+    setBusy(true);
+    try {
+      await downloadOdLetter(data);
+    } catch (err) {
+      setPdfError(err.message || "Could not create the PDF.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error) return <Notice tone="error" title="Could not load the roster">{error}</Notice>;
+  if (!data) return <p className="meta" role="status">Loading roster</p>;
+
+  return (
+    <div className="mt-phi-2">
+      {data.attendees.length === 0 ? (
+        <p className="text-base text-muted">Nobody has registered yet.</p>
+      ) : (
+        <div className="overflow-x-auto border border-line">
+          <table className="w-full min-w-[34rem] border-collapse text-left">
+            <thead>
+              <tr className="meta border-b border-line-hover">
+                <th className="px-phi-2 py-phi-1 font-normal">#</th>
+                <th className="px-phi-2 py-phi-1 font-normal">Student name</th>
+                <th className="px-phi-2 py-phi-1 font-normal">Email</th>
+                <th className="px-phi-2 py-phi-1 font-normal">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.attendees.map((a, i) => (
+                <tr key={a.user_id} className="border-b border-line last:border-b-0">
+                  <td className="px-phi-2 py-phi-1 font-mono text-xs tabular-nums">{i + 1}</td>
+                  <td className="px-phi-2 py-phi-1 text-base">{a.name}</td>
+                  <td className="px-phi-2 py-phi-1 font-mono text-xs normal-case text-muted">{a.email}</td>
+                  <td className="px-phi-2 py-phi-1 font-mono text-xs text-muted">{formatDateTime(a.registered_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={makePdf}
+        disabled={busy || data.attendees.length === 0}
+        className="mt-phi-2 w-full border border-accent bg-accent px-phi-3 py-phi-1 font-mono text-xs uppercase text-accent-ink transition-colors duration-300 ease-studio hover:bg-transparent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent disabled:hover:text-accent-ink sm:w-auto"
+      >
+        {busy ? "Building PDF" : "[GENERATE OFFICIAL OD LETTER (PDF)]"}
+      </button>
+      {pdfError && (
+        <p role="alert" className="meta mt-phi-1 normal-case text-ink">
+          {pdfError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EventsPanel({ club, refreshKey }) {
+  const [events, setEvents] = useState(null);
+  const [error, setError] = useState(null);
+  const [openId, setOpenId] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    setEvents(null);
+    setError(null);
+    setOpenId(null);
+    api.events
+      .list(club.id)
+      .then((list) => alive && setEvents(list))
+      .catch((err) => alive && setError(describeError(err)));
+    return () => {
+      alive = false;
+    };
+  }, [club.id, refreshKey]);
+
+  return (
+    <SpotlightCard as="section" className="p-phi-3 lg:p-phi-4">
+      <p className="meta">Events</p>
+      <h2 className="mt-[0.4rem] text-lg font-bold">Club events &amp; OD letters</h2>
+
+      <div className="mt-phi-3">
+        {error && <Notice tone="error" title="Could not load events">{error}</Notice>}
+        {!error && events === null && <p className="meta" role="status">Loading events</p>}
+        {events && events.length === 0 && (
+          <p className="text-base text-muted">No events yet. Create one with the form on this page.</p>
+        )}
+        {events && events.length > 0 && (
+          <ul>
+            {events.map((ev) => {
+              const full = ev.registered >= ev.capacity;
+              const open = openId === ev.id;
+              return (
+                <li key={ev.id} className="border-t border-line py-phi-3 first:border-t-0 first:pt-0">
+                  <div className="flex flex-wrap items-start justify-between gap-phi-2">
+                    <div>
+                      <p className="text-base font-semibold">{ev.title}</p>
+                      <p className="meta mt-[0.2rem]">
+                        {formatDateTime(ev.starts_at)}
+                        {ev.venue ? ` / ${ev.venue}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-phi-2">
+                      <span className="font-mono text-base tabular-nums">
+                        {ev.registered} <span className="text-muted">/ {ev.capacity}</span>
+                      </span>
+                      {full && (
+                        <span className="meta border border-accent/60 px-[0.5rem] py-[0.2rem] text-accent">
+                          [FULL // READY FOR OD]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setOpenId(open ? null : ev.id)}
+                    className="meta mt-phi-2 border border-line-hover px-phi-2 py-[0.4rem] text-ink transition-colors hover:border-accent hover:text-accent"
+                  >
+                    {open ? "Hide roster" : "View roster & generate OD"}
+                  </button>
+                  {open && <Roster event={ev} />}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </SpotlightCard>
+  );
+}
+
 const FILTERS = ["pending", "accepted", "rejected", "all"];
 
 export default function AdminClub() {
@@ -256,6 +427,7 @@ export default function AdminClub() {
   const [selectedId, setSelectedId] = useState(null);
   const [openOverride, setOpenOverride] = useState({});
   const [filter, setFilter] = useState("pending");
+  const [eventsKey, setEventsKey] = useState(0);
 
   // Work out which clubs this person manages. There is no "my clubs" route, so a club admin is
   // detected by asking for each club's applications: 200 means managed, 403 means not theirs.
@@ -361,7 +533,8 @@ export default function AdminClub() {
           </div>
 
           <div className="mt-phi-4 grid grid-cols-1 gap-phi-3 lg:grid-cols-golden lg:gap-phi-4">
-            {/* 62%: review queue */}
+            {/* 62%: review queue, then events and OD letters */}
+            <div className="flex flex-col gap-phi-3 lg:gap-phi-4">
             <SpotlightCard as="section" className="p-phi-3 lg:p-phi-4 lg:self-start">
               <p className="meta">Applications</p>
               <h2 className="mt-[0.4rem] text-lg font-bold">Review queue</h2>
@@ -399,6 +572,8 @@ export default function AdminClub() {
                 )}
               </div>
             </SpotlightCard>
+            <EventsPanel club={club} refreshKey={eventsKey} />
+            </div>
 
             {/* 38%: toggle and event form */}
             <div className="flex flex-col gap-phi-3 lg:gap-phi-4">
@@ -407,7 +582,7 @@ export default function AdminClub() {
                 isOpen={isOpen}
                 onChange={(open) => setOpenOverride((o) => ({ ...o, [club.id]: open }))}
               />
-              <CreateEventForm club={club} />
+              <CreateEventForm club={club} onCreated={() => setEventsKey((k) => k + 1)} />
             </div>
           </div>
         </>

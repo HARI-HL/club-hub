@@ -233,6 +233,11 @@ export const api = {
     // 400 deadline passed, 409 already registered or event is full.
     register: (eventId) =>
       request(`/api/events/${eventId}/register`, { method: "POST", auth: true }),
+
+    // GET /api/events/<id>/attendees  (club_admin of the event's club, or site_admin)
+    // -> { event: { id, title, venue, event_date, capacity, registered_count, club_name },
+    //      attendees: [{ user_id, name, email, registered_at }] }   403 if you do not manage that club.
+    getEventAttendees: (eventId) => request(`/api/events/${eventId}/attendees`, { auth: true }),
   },
 
   me: {

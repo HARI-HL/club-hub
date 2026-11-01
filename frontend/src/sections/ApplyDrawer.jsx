@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useLenis } from "../lib/SmoothScroll.jsx";
 import Notice from "../components/Notice.jsx";
+import Field from "../components/Field.jsx";
+import { buildStatement, isValidPortfolioUrl } from "../utils/statement.js";
 import api from "../services/api.js";
 import { describeError } from "../utils/errors.js";
 
@@ -16,6 +18,8 @@ export default function ApplyDrawer({ club, onClose }) {
   const panel = useRef(null);
   const [shown, setShown] = useState(false); // drives the slide transition
   const [statement, setStatement] = useState("");
+  const [portfolio, setPortfolio] = useState("");
+  const [portfolioError, setPortfolioError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(false);
@@ -27,6 +31,8 @@ export default function ApplyDrawer({ club, onClose }) {
   useEffect(() => {
     if (!club) return;
     setStatement("");
+    setPortfolio("");
+    setPortfolioError(null);
     setError(null);
     setDone(false);
     setOverview(null);
@@ -95,9 +101,16 @@ export default function ApplyDrawer({ club, onClose }) {
   async function submit(e) {
     e.preventDefault();
     setError(null);
+    const link = portfolio.trim();
+    if (link && !isValidPortfolioUrl(link)) {
+      setPortfolioError("Enter a full link that starts with http:// or https://");
+      return;
+    }
+    setPortfolioError(null);
     setBusy(true);
     try {
-      await api.clubs.apply(club.id, statement.trim());
+      // The link travels at the front of the statement, so the database needs no new column
+      await api.clubs.apply(club.id, buildStatement(link, statement));
       setDone(true);
     } catch (err) {
       setError({ message: describeError(err), status: err.status });
@@ -183,7 +196,7 @@ export default function ApplyDrawer({ club, onClose }) {
           )}
 
           {user && !done && (
-            <form onSubmit={submit} className="flex flex-col gap-phi-3 border-t border-line pt-phi-3">
+            <form onSubmit={submit} noValidate className="flex flex-col gap-phi-3 border-t border-line pt-phi-3">
               {isSiteAdmin && (
                 <Notice title="Admin account">Site admins review and manage clubs but cannot apply to them.</Notice>
               )}
@@ -198,6 +211,18 @@ export default function ApplyDrawer({ club, onClose }) {
                   You can hold one club per category.
                 </Notice>
               )}
+
+              <Field
+                label="Portfolio / GitHub / showcase video URL (optional)"
+                type="url"
+                inputMode="url"
+                value={portfolio}
+                onChange={(e) => setPortfolio(e.target.value)}
+                disabled={blocked}
+                placeholder="https://github.com/... or https://drive.google.com/... or portfolio link"
+                hint="Drop a link to your best work, GitHub, or a short video of you doing something cool for this club."
+                error={portfolioError}
+              />
 
               <div>
                 <label htmlFor="statement" className="meta block">

@@ -693,5 +693,44 @@ def server_error(e):
     db.session.rollback()
     return jsonify({"error": "Something went wrong on our side"}), 500
 
+@app.route("/api/events/<int:event_id>/attendees", methods=["GET"])
+@roles_required("club_admin", "site_admin")
+def event_attendees(event_id):
+    user = db.session.get(User, int(get_jwt_identity()))
+    event = db.session.get(Event, event_id)
+    if not event or event.is_removed:
+        return jsonify({"error": "Event not found"}), 404
+    if user.role != "site_admin" and not is_club_admin(user.id, event.club_id):
+        return jsonify({"error": "You do not manage this club"}), 403
+
+    club = db.session.get(Club, event.club_id)
+    rows = (
+        db.session.query(EventRegistration, User)
+        .join(User, User.id == EventRegistration.user_id)
+        .filter(EventRegistration.event_id == event_id)
+        .order_by(EventRegistration.registered_at, EventRegistration.id)
+        .all()
+    )
+    return jsonify({
+        "event": {
+            "id": event.id,
+            "title": event.title,
+            "venue": event.venue,
+            "event_date": event.starts_at.isoformat(),
+            "capacity": event.capacity,
+            "registered_count": len(rows),
+            "club_name": club.name if club else "",
+        },
+        "attendees": [
+            {
+                "user_id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "registered_at": r.registered_at.isoformat() if r.registered_at else None,
+            }
+            for r, u in rows
+        ],
+    })
+
 if __name__ == "__main__":
     app.run(debug=True)

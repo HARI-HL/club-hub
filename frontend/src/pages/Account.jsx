@@ -6,6 +6,8 @@ import StatusBadge from "../components/StatusBadge.jsx";
 import SpotlightCard from "../components/SpotlightCard.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import api from "../services/api.js";
+import PortfolioLink from "../components/PortfolioLink.jsx";
+import { parseApplicationStatement } from "../utils/statement.js";
 import { describeError, formatDateTime } from "../utils/errors.js";
 
 const SLOTS = [
@@ -104,6 +106,11 @@ export default function Account() {
                       <div>
                         <p className="text-base font-semibold">{a.club}</p>
                         <p className="meta mt-[0.2rem]">Applied {formatDateTime(a.applied_at)}</p>
+                        {a.statement && (
+                          <div className="mt-phi-1">
+                            <PortfolioLink url={parseApplicationStatement(a.statement).portfolioUrl} />
+                          </div>
+                        )}
                       </div>
                       <StatusBadge status={a.status} />
                     </li>
