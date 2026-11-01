@@ -1,4 +1,5 @@
 import os
+import re
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from datetime import datetime, timezone, timedelta
@@ -23,12 +24,28 @@ from flask_jwt_extended import (
 )
 import smtplib
 from email.message import EmailMessage
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import HTTPException
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 load_dotenv()
 
+# Refuse to start without a signing secret. There is deliberately no fallback value.
+_JWT_SECRET = os.getenv("JWT_SECRET_KEY")
+if not _JWT_SECRET:
+    raise RuntimeError("JWT_SECRET_KEY is not set. Refusing to start without a signing secret.")
+if len(_JWT_SECRET) < 32:
+    print("WARNING: JWT_SECRET_KEY is shorter than 32 characters. Use a longer random value.")
+
 app = Flask(__name__)
-CORS(app)
+# Behind Render's proxy, read the real client IP and scheme. Without this every visitor shares one
+# rate-limit bucket (the proxy's IP).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+# Set ALLOWED_ORIGINS to your site address(es), comma separated, to lock CORS down.
+# Left unset it stays open, which is safe for token-in-header auth but not tight.
+_origins = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+CORS(app, origins=_origins or "*")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -212,6 +229,43 @@ def roles_required(*allowed_roles):
         return wrapper
     return decorator
 
+# ---------------------------------------------------------------- hardening helpers
+MAX_NAME = 100
+MAX_EMAIL = 255
+MAX_PASSWORD = 72          # bcrypt only reads 72 bytes, and newer bcrypt raises on longer input
+MAX_TITLE = 200
+MAX_VENUE = 200
+MAX_DESCRIPTION = 5000
+MAX_STATEMENT = 3000
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PORTFOLIO_TAG = re.compile(r"^\[PORTFOLIO_URL:\s*([^\]]*)\]")
+URL_RE = re.compile(r"^https?://[^\s\[\]<>\"']{1,500}$", re.IGNORECASE)
+
+
+def random_password_hash():
+    return bcrypt.generate_password_hash(secrets.token_urlsafe(32)).decode("utf-8")
+
+
+@app.before_request
+def require_json_object():
+    """Every JSON body must be an object, so route code can safely call data.get(...)."""
+    if request.method in ("POST", "PUT", "PATCH") and request.data:
+        if request.get_json(silent=True) is None or not isinstance(request.get_json(silent=True), dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    if request.is_secure:
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.headers.get("Authorization"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 def is_club_admin(user_id, club_id):
     return db.session.get(ClubAdmin, (user_id, club_id)) is not None
 
@@ -232,13 +286,21 @@ def register():
         return jsonify({"error": "Name, email and password are required"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if len(password) > MAX_PASSWORD:
+        return jsonify({"error": f"Password must be at most {MAX_PASSWORD} characters"}), 400
+    if len(name) > MAX_NAME or len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
+        return jsonify({"error": "Enter a valid name and email address"}), 400
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
     password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
     user = User(name=name, email=email, password_hash=password_hash)
     db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:  # two sign-ups with the same email at the same instant
+        db.session.rollback()
+        return jsonify({"error": "Email already registered"}), 409
 
     try:
         send_verification_email(user)
@@ -260,7 +322,7 @@ def login():
 
     user = User.query.filter_by(email=email).first()
 
-    if not user or not bcrypt.check_password_hash(user.password_hash, password):
+    if len(password) > MAX_PASSWORD or not user or not bcrypt.check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
     if not user.is_active:
         return jsonify({"error": "This account has been disabled"}), 403
@@ -304,15 +366,16 @@ def google_login():
             user = User(
                 name=(info.get("name") or email.split("@")[0])[:100],
                 email=email,
-                password_hash=bcrypt.generate_password_hash(
-                    secrets.token_urlsafe(32)
-                ).decode("utf-8"),
+                password_hash=random_password_hash(),
                 is_verified=True,
             )
             db.session.add(user)
             db.session.commit()
         elif not user.is_verified:
-            user.is_verified = True  # Google has proven they own this email
+            # Google has proven they own this email. The unverified account may have been created by
+            # someone else who typed this address, so throw away whatever password it had.
+            user.is_verified = True
+            user.password_hash = random_password_hash()
             db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -328,6 +391,8 @@ def google_login():
 @jwt_required()
 def me():
     user = db.session.get(User, int(get_jwt_identity()))
+    if not user or not user.is_active:
+        return jsonify({"error": "Account not available"}), 403
     return jsonify({
         "id": user.id,
         "name": user.name,
@@ -336,6 +401,7 @@ def me():
     })
 
 @app.route("/api/auth/verify/<token>")
+@limiter.limit("30 per minute")
 def verify_email(token):
     try:
         email = serializer.loads(token, salt="email-verify", max_age=86400)
@@ -377,12 +443,18 @@ def create_club():
 
     if not name or category not in ("technical", "non_technical"):
         return jsonify({"error": "Name and a valid category are required"}), 400
+    if len(name) > MAX_NAME or len(description) > MAX_DESCRIPTION:
+        return jsonify({"error": "Name or description is too long"}), 400
     if Club.query.filter_by(name=name).first():
         return jsonify({"error": "A club with this name already exists"}), 409
 
     club = Club(name=name, category=category, description=description)
     db.session.add(club)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "A club with this name already exists"}), 409
     return jsonify({"message": "Club created", "id": club.id}), 201
 
 @app.route("/api/clubs/<int:club_id>/admins", methods=["POST"])
@@ -407,7 +479,11 @@ def add_club_admin(club_id):
     if user.role == "student":
         user.role = "club_admin"
     db.session.add(ClubAdmin(user_id=user.id, club_id=club.id))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "Already an admin of this club"}), 409
     return jsonify({"message": f"{user.name} is now an admin of {club.name}"}), 201
 
 @app.route("/api/clubs/<int:club_id>/apply", methods=["POST"])
@@ -428,10 +504,19 @@ def apply_to_club(club_id):
 
     data = request.get_json() or {}
     statement = (data.get("statement") or "").strip()
+    if len(statement) > MAX_STATEMENT:
+        return jsonify({"error": "Statement is too long"}), 400
+    tag = PORTFOLIO_TAG.match(statement)
+    if tag and not URL_RE.match(tag.group(1).strip()):
+        return jsonify({"error": "Portfolio link must start with http:// or https://"}), 400
 
     application = Application(user_id=user_id, club_id=club.id, statement=statement)
     db.session.add(application)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:  # a double click, or two tabs, sending the same application together
+        db.session.rollback()
+        return jsonify({"error": "You have already applied to this club"}), 409
     return jsonify({"message": "Application submitted", "id": application.id}), 201
 
 @app.route("/api/clubs/<int:club_id>/applications", methods=["GET"])
@@ -470,7 +555,12 @@ def list_applications(club_id):
 def review_application(application_id):
     reviewer_id = int(get_jwt_identity())
     reviewer = db.session.get(User, reviewer_id)
-    application = db.session.get(Application, application_id)
+    application = (
+        db.session.query(Application)
+        .filter_by(id=application_id)
+        .with_for_update()
+        .first()
+    )
     if not application:
         return jsonify({"error": "Application not found"}), 404
     if reviewer.role != "site_admin" and not is_club_admin(reviewer_id, application.club_id):
@@ -528,6 +618,12 @@ def create_event(club_id):
 
     if not title or not starts_at or not deadline:
         return jsonify({"error": "Title, start time and registration deadline are required"}), 400
+    if (
+        len(title) > MAX_TITLE
+        or len((data.get("venue") or "")) > MAX_VENUE
+        or len((data.get("description") or "")) > MAX_DESCRIPTION
+    ):
+        return jsonify({"error": "Title, venue or description is too long"}), 400
     if capacity < 1:
         return jsonify({"error": "Capacity must be at least 1"}), 400
     if starts_at <= datetime.now(timezone.utc):
@@ -636,6 +732,9 @@ def set_recruitment(club_id):
 @jwt_required()
 def my_overview():
     user_id = int(get_jwt_identity())
+    me_user = db.session.get(User, user_id)
+    if not me_user or not me_user.is_active:
+        return jsonify({"error": "Account not available"}), 403
 
     applications = (
         db.session.query(Application, Club)
@@ -693,6 +792,16 @@ def server_error(e):
     db.session.rollback()
     return jsonify({"error": "Something went wrong on our side"}), 500
 
+
+@app.errorhandler(Exception)
+def unhandled(e):
+    """Last resort. Log the real error on the server, return a generic message to the client."""
+    if isinstance(e, HTTPException):
+        return jsonify({"error": e.name}), e.code
+    db.session.rollback()
+    app.logger.exception("Unhandled error")
+    return jsonify({"error": "Something went wrong on our side"}), 500
+
 @app.route("/api/events/<int:event_id>/attendees", methods=["GET"])
 @roles_required("club_admin", "site_admin")
 def event_attendees(event_id):
@@ -733,4 +842,4 @@ def event_attendees(event_id):
     })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.getenv("FLASK_DEBUG") == "1")
